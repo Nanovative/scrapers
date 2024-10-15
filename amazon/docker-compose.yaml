@@ -1,0 +1,12 @@
+services:
+  extract-tokens:
+    image: amazon-extract-tokens:latest
+    build:
+      context: ./extract-tokens
+    ports:
+      - "8000:8000"
+    ipc: host  # This sets the IPC mode
+    security_opt:
+      - seccomp=./extract-tokens/seccomp_profile.json  # This specifies the seccomp profile
+
+    command: python3 main.py api
