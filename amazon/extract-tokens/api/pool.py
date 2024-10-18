@@ -1,8 +1,8 @@
-from service import get_amazon_cookies, AmazonCookieRequest, pool
-from model import event_loop_lock
-from fastapi import FastAPI
+from services.amazon_cookie_pool import get_amazon_cookies, AmazonCookieRequest
+from api import get_cookie_set_pool, event_loop_lock
+from fastapi import APIRouter
 
-app = FastAPI()
+router = APIRouter()
 
 
 async def _get_new(body: AmazonCookieRequest):
@@ -12,7 +12,8 @@ async def _get_new(body: AmazonCookieRequest):
 
 async def _fetch_pool(body: AmazonCookieRequest):
     print("fetching from pool")
-    cookie_set = await pool.get(body.browser_type, event_loop_lock)
+    cookie_set_pool = await get_cookie_set_pool()
+    cookie_set = await cookie_set_pool.get(body.browser_type, event_loop_lock)
     if cookie_set:
         return {
             "message": "ok",
@@ -24,11 +25,12 @@ async def _fetch_pool(body: AmazonCookieRequest):
     return None
 
 
-@app.post("/cookies/amazon/fill")
-async def _fill_amazon_cookies(body: AmazonCookieRequest):
+@router.post("/fill")
+async def fill_amazon_cookies(body: AmazonCookieRequest):
 
     response = await _get_new(body)
-    pool_add_ok = await pool.add(
+    cookie_set_pool = await get_cookie_set_pool()
+    pool_add_ok = await cookie_set_pool.add(
         body.browser_type,
         response["postcode"],
         response["location"],
@@ -39,8 +41,8 @@ async def _fill_amazon_cookies(body: AmazonCookieRequest):
     return {**response, "pool_add_ok": pool_add_ok}
 
 
-@app.post("/cookies/amazon/fetch")
-async def _fetch_amazon_cookies(body: AmazonCookieRequest):
+@router.post("/fetch")
+async def fetch_amazon_cookies(body: AmazonCookieRequest):
 
     if not body.do_fetch_pool:
         response = await _get_new(body)
@@ -54,19 +56,4 @@ async def _fetch_amazon_cookies(body: AmazonCookieRequest):
                 "location": "",
             }
 
-    return response
-
-@app.get("/cookies/amazon/pool_size")
-async def _get_amazon_cookie_pool_size(body: AmazonCookieRequest):
-    pool_sizes = {
-        browser_type: {
-            "current": await pool.pool_size(browser_type),
-            "max": await pool.max_pool_size(browser_type),
-        }
-        for browser_type in pool._pool_weight
-    }
-    response = {
-        "message": "ok",
-        "size": pool_sizes,
-    }
     return response
