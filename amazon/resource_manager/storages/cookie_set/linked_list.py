@@ -1,7 +1,7 @@
 import uuid
 import asyncio
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TypeVar, Generic, Optional
 from models.cookie import Cookie, AmazonCookieSet
 from storages.cookie_set.base import CookieSetStorage
@@ -98,15 +98,15 @@ class LinkedListQueue(Generic[T]):
 
 
 class LinkedListCookieSetStorage(CookieSetStorage):
-    def __init__(self, /, max_len=100) -> None:
-        self.queue = LinkedListQueue[AmazonCookieSet](max_len=max_len)
-        self.queue_size = max_len
+    def __init__(self, /, max_cookie_set=100, **kwargs) -> None:
+        self.queue = LinkedListQueue[AmazonCookieSet](max_len=max_cookie_set)
+        self.queue_size = max_cookie_set
 
     def max_size(self):
         return self.queue_size
 
     async def current_size(self) -> int:
-        return len(self.queue)
+        return await self.queue.current_size()
 
     async def _add(self, postcode: int, location: str, cookies: list[Cookie]) -> bool:
         item = AmazonCookieSet(
@@ -114,6 +114,7 @@ class LinkedListCookieSetStorage(CookieSetStorage):
             postcode=postcode,
             cookies=cookies,
             location=location,
+            expires=datetime.now() + timedelta(days=3),
         )
         return self.queue.prepend(item)
 

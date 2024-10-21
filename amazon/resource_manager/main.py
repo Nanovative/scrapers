@@ -24,7 +24,8 @@ shutdown_event = asyncio.Event()
 
 # Run the application
 async def run_api_app(event_loop: asyncio.AbstractEventLoop):
-    from api.pool import router as pool_router
+    from api.cookie import router as cookie_router
+    from api.proxy import router as proxy_router
     from api.metadata import router as metadata_router
 
     cookie_pool_fill_task = event_loop.create_task(
@@ -43,8 +44,10 @@ async def run_api_app(event_loop: asyncio.AbstractEventLoop):
     )
 
     app = FastAPI()
-    app.include_router(pool_router)
-    app.include_router(metadata_router)
+
+    app.include_router(metadata_router, prefix="/meta")
+    app.include_router(cookie_router, prefix="/cookie")
+    app.include_router(proxy_router, prefix="/proxy")
 
     config = uvicorn.Config(
         app,

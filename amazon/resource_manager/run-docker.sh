@@ -7,7 +7,7 @@ docker run \
     -it \
     --name=amazon-resource-manager \
     --ipc=host \
-    -e "POSTGRESQL_CONN_STR=${POSTGRESQL_CONN_STR:-postgresql://admin:123@postgres:5432/postgres}" \
+    --env-file=.env \
     -p 8000:8000 \
     --user pwuser \
     --security-opt seccomp=seccomp_profile.json \

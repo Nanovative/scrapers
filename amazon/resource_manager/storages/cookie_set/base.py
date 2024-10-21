@@ -1,3 +1,5 @@
+import uuid
+
 from abc import ABC, abstractmethod
 from models.cookie import Cookie, AmazonCookieSet
 import asyncio
@@ -11,16 +13,21 @@ class CookieSetStorage(ABC):
         postcode: int,
         location: str,
         cookies: list[Cookie],
+        coroutine_id: uuid.UUID = None,
         lock: asyncio.Lock = None,
     ) -> bool:
         pass
 
     @abstractmethod
-    async def get(self, lock: asyncio.Lock = None) -> Optional[AmazonCookieSet]:
+    async def get(
+        self, coroutine_id: uuid.UUID = None, lock: asyncio.Lock = None
+    ) -> Optional[AmazonCookieSet]:
         pass
 
     @abstractmethod
-    async def clean(self, lock: asyncio.Lock = None) -> None:
+    async def clean(
+        self, coroutine_id: uuid.UUID = None, lock: asyncio.Lock = None
+    ) -> None:
         pass
 
     @abstractmethod

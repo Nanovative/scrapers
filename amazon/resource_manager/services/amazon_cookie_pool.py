@@ -7,15 +7,16 @@ from playwright.async_api import (
     async_playwright,
     TimeoutError as PlaywrightTimeoutError,
 )
+from utils import request_print, coroutine_print
 from models.cookie import Cookie, AmazonCookieRequest
 from models.enums import BrowserType
 from storages.cookie_set.base import CookieSetStorage
 
 postcode_pool = [
     99501,  # Anchorage
-    93311,  # Bakersfield
-    71601,  # Pine Bluff
-    11001,  # Floral Park
+    # 93311,  # Bakersfield
+    # 71601,  # Pine Bluff
+    # 11001,  # Floral Park
 ]
 
 
@@ -63,11 +64,16 @@ class AmazonCookieSetPool:
     def _is_initialized() -> bool:
         return AmazonCookieSetPool._instance is not None
 
-    async def clean(self, browser_type: str, lock: asyncio.Lock = None):
+    async def clean(
+        self,
+        browser_type: str,
+        coroutine_id: uuid.UUID = None,
+        lock: asyncio.Lock = None,
+    ):
         if browser_type not in self._browser_types:
             return
 
-        await self._pool[BrowserType(browser_type)].clean(lock)
+        await self._pool[BrowserType(browser_type)].clean(coroutine_id, lock)
 
     async def pool_size(self, browser_type: str):
         if browser_type not in self._browser_types:
@@ -93,14 +99,21 @@ class AmazonCookieSetPool:
 
         return await self._pool[BrowserType(browser_type)].is_empty()
 
-    async def get(self, browser_type: str, lock: asyncio.Lock = None):
+    async def get(
+        self,
+        browser_type: str,
+        coroutine_id: uuid.UUID = None,
+        lock: asyncio.Lock = None,
+    ):
         async with lock:
             if browser_type not in self._browser_types:
                 return None
 
-            await self.clean(browser_type, None)
+            await self.clean(browser_type, coroutine_id, None)
 
-            cookie_set = await self._pool[BrowserType(browser_type)].get(None)
+            cookie_set = await self._pool[BrowserType(browser_type)].get(
+                coroutine_id, None
+            )
             return cookie_set
 
     async def add(
@@ -109,13 +122,14 @@ class AmazonCookieSetPool:
         postcode: int,
         location: str,
         cookies: list[Cookie],
+        coroutine_id: uuid.UUID = None,
         lock: asyncio.Lock = None,
     ):
         if browser_type not in self._browser_types:
             return False
 
         success = await self._pool[BrowserType(browser_type)].add(
-            postcode, location, cookies, lock
+            postcode, location, cookies, coroutine_id, lock
         )
 
         return success
@@ -176,7 +190,7 @@ async def get_amazon_cookies(body: AmazonCookieRequest):
         while retries > 0:
             try:
                 await page.goto(url, timeout=random.randint(8000, 14000))
-                print(f"[request_id={request_id}]: went to {url}")
+                request_print(request_id, f"Went to {url}")
 
                 postcode_locator = await get_postcode_locator(page)
                 old_location = await postcode_locator.inner_text(
@@ -186,14 +200,11 @@ async def get_amazon_cookies(body: AmazonCookieRequest):
                 response["location"] = old_location[old_location.index("\n") + 1 :]
 
                 await postcode_locator.click(timeout=random.randint(8000, 14000))
-                print(f"[request_id={request_id}]: clicked Postcode button")
+                request_print(request_id, "Clicked Postcode button")
                 break
 
             except PlaywrightTimeoutError:
-                print(
-                    f"[request_id={request_id}]: num of retries left:",
-                    retries,
-                )
+                request_print(request_id, "Num of retries left:", retries)
                 retries -= 1
                 continue
 
@@ -207,10 +218,10 @@ async def get_amazon_cookies(body: AmazonCookieRequest):
 
         zipcode_input_locator = await get_zipcode_locator(page)
         await zipcode_input_locator.fill(str(postcode))
-        print(f"[request_id={request_id}]: input {postcode} postcode into <input>")
+        request_print(request_id, f"Input {postcode} postcode into <input>")
 
         await page.locator("id=GLUXZipInputSection").get_by_text("Apply").click()
-        print(f"[request_id={request_id}]: submitted {postcode} postcode")
+        request_print(request_id, f"Submitted {postcode} postcode")
 
         while retries > 0:
             try:
@@ -230,14 +241,14 @@ async def get_amazon_cookies(body: AmazonCookieRequest):
                 break
 
         if not retries:
-            response["message"] = f"invalid postal code: {postcode}"
+            response["message"] = f"Invalid postal code: {postcode}"
             return response
 
         await page.wait_for_timeout(765)
 
         close_postcode_diag_locator = await get_close_postcode_diag_locator(page)
         await close_postcode_diag_locator.click()
-        print(f"[request_id={request_id}]: close the popup and wait for reset")
+        request_print(request_id, "Close popup and wait for reset")
 
         await page.goto(url)
 
@@ -271,10 +282,11 @@ async def start_cleanup_task(
 ):
     for browser_type in pool._browser_types:
         old_pool_size = await pool.pool_size(browser_type)
-        await pool.clean(browser_type, lock)
+        await pool.clean(browser_type, coroutine_id, lock)
         new_pool_size = await pool.pool_size(browser_type)
-        print(
-            f"[coroutine_id={coroutine_id}]: pool size before/after cleaning: [{old_pool_size}/{new_pool_size}]"
+        coroutine_print(
+            coroutine_id,
+            f"Pool size before/after cleaning: [{old_pool_size}/{new_pool_size}]",
         )
 
 
@@ -288,9 +300,7 @@ async def start_add_task(
         for browser_type in pool._browser_types:
             if await pool.is_full(browser_type):
                 pool_size = await pool.pool_size(browser_type)
-                print(
-                    f"[coroutine_id={coroutine_id}]: Cookie set pool is full ({pool_size})"
-                )
+                coroutine_print(coroutine_id, f"Cookie set pool is full ({pool_size})")
                 return
             postcode = get_random_us_postcode()
             body = AmazonCookieRequest(
@@ -303,17 +313,16 @@ async def start_add_task(
             resp = await get_amazon_cookies(body)
             cookies = resp["cookies"]
             location = resp["location"]
-            print(
-                f"[coroutine_id={coroutine_id}]: task message:",
-                resp["message"],
-                resp["location"],
+            coroutine_print(
+                coroutine_id, "Task message:", resp["message"], resp["location"]
             )
             if resp["message"] == "ok":
                 old_pool_size = await pool.pool_size(browser_type)
                 await pool.add(browser_type, postcode, location, cookies, lock)
                 new_pool_size = await pool.pool_size(browser_type)
-                print(
-                    f"[coroutine_id={coroutine_id}]: pool size before/after adding: [{old_pool_size}/{new_pool_size}]"
+                coroutine_print(
+                    coroutine_id,
+                    f"Pool size before/after adding: [{old_pool_size}/{new_pool_size}]",
                 )
 
     if is_independent_loop:

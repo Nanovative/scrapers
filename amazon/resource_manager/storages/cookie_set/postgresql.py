@@ -3,9 +3,11 @@ import uuid
 import asyncio
 import asyncpg
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List
+from utils import coroutine_print
 from models.cookie import Cookie, AmazonCookieSet
+from models.enums import BrowserType
 from storages.cookie_set.base import CookieSetStorage
 
 
@@ -23,6 +25,7 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
             CREATE TABLE IF NOT EXISTS "scraping"."amazon_cookie_sets" (
                 id UUID DEFAULT gen_random_uuid(),
                 postcode INT,
+                browser_type VARCHAR(15),
                 cookies JSONB,
                 location VARCHAR(255),
                 expires TIMESTAMP DEFAULT NOW() + INTERVAL '3 days',
@@ -33,21 +36,28 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
             );
         """,
         "get_count": """
-            SELECT COUNT(*) 
-            FROM "scraping"."amazon_cookie_sets";
+            SELECT COUNT(*)
+            FROM "scraping"."amazon_cookie_sets"
+            WHERE browser_type = $1;
         """,
         "insert": """
-            INSERT INTO "scraping"."amazon_cookie_sets"(postcode, location, cookies, expires)
-            VALUES($1, $2, $3, $4);
+            INSERT INTO "scraping"."amazon_cookie_sets"(
+                postcode, 
+                location, 
+                cookies, 
+                expires, 
+                browser_type
+            )
+            VALUES($1, $2, $3, $4, $5);
         """,
         "cleanup": """
             DELETE FROM "scraping"."amazon_cookie_sets" 
-            WHERE expires < $1 OR usable_times <= 0;
+            WHERE browser_type = $1 AND (expires < $2 OR usable_times <= 0);
         """,
         "get_usable_cookie_set": """
             SELECT id, postcode, location, cookies, expires
             FROM "scraping"."amazon_cookie_sets"
-            WHERE expires > $1 AND usable_times > 0
+            WHERE browser_type = $1 AND expires > $2 AND usable_times > 0
             ORDER BY expires ASC, last_used DESC
             LIMIT 1
         """,
@@ -59,13 +69,20 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
     }
 
     def __init__(
-        self, /, conn_str: str = None, max_conn: int = 4, max_cookie_set: int = 100
+        self,
+        /,
+        conn_str: str = None,
+        max_conn: int = 2,
+        max_cookie_set: int = 100,
+        browser_type: BrowserType = BrowserType.firefox,
+        **kwargs,
     ) -> None:
         self.conn_str = conn_str
         self.max_conn = max_conn
-        self.min_conn = min(2, self.max_conn)
+        self.min_conn = min(1, self.max_conn)
         self.max_cookie_set = max_cookie_set
         self.pool: asyncpg.Pool = None
+        self.browser_type = browser_type
 
     async def initialize(self):
         pool = await asyncpg.create_pool(
@@ -80,7 +97,7 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
                 await pool.execute(self.__sql_queries["init_schema"])
         except Exception as e:
             pass
-            
+
         conn: asyncpg.connection.Connection = await pool.acquire()
         is_success = True
         try:
@@ -99,8 +116,10 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
         await self.pool.close()
 
     async def current_size(self) -> int:
-        data: asyncpg.Record = await self.pool.fetchrow(self.__sql_queries["get_count"])
-        return data[0]
+        record: asyncpg.Record = await self.pool.fetchrow(
+            self.__sql_queries["get_count"], self.browser_type.value
+        )
+        return record[0]
 
     def max_size(self):
         return self.max_cookie_set
@@ -110,12 +129,13 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
         postcode: int,
         location: str,
         cookies: List[Cookie],
-        coroutine_id: uuid.UUID = uuid.uuid4(),
+        coroutine_id: uuid.UUID = None,
     ) -> bool:
         item = AmazonCookieSet(
             postcode=postcode,
             cookies=cookies,
             location=location,
+            expires=datetime.now() + timedelta(days=3),
         )
 
         is_success = True
@@ -130,34 +150,34 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
                     location,
                     json.dumps(cookies),
                     item.expires,
+                    self.browser_type.value,
                 )
         except Exception as e:
             # Transaction error comes here, automatically rollback
-            print(f"[coroutine_id={coroutine_id}]: Can't add cookie set to pool:", e)
+            coroutine_print(coroutine_id, "Can't add cookie set to pool:", e)
             is_success = False
         finally:
             await self.pool.release(conn)
 
         return is_success
 
-    async def _clean(self, coroutine_id: uuid.UUID = uuid.uuid4()) -> None:
+    async def _clean(self, coroutine_id: uuid.UUID = None) -> None:
         conn: asyncpg.connection.Connection = await self.pool.acquire()
         try:
             async with conn.transaction() as tx:
                 await conn.execute(
                     self.__sql_queries["cleanup"],
+                    self.browser_type.value,
                     datetime.now(),
                 )
         except Exception as e:
             # Transaction error comes here, automatically rollback
-            print(f"[coroutine_id={coroutine_id}]: Can't clean cookie sets:", e)
+            coroutine_print(coroutine_id, "Can't clean cookie sets:", e)
 
         finally:
             await self.pool.release(conn)
 
-    async def _get(
-        self, coroutine_id: uuid.UUID = uuid.uuid4()
-    ) -> Optional[AmazonCookieSet]:
+    async def _get(self, coroutine_id: uuid.UUID = None) -> Optional[AmazonCookieSet]:
         conn: asyncpg.connection.Connection = await self.pool.acquire()
         cookie_set = None
         current_time = datetime.now()
@@ -165,6 +185,7 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
             async with conn.transaction():
                 row: asyncpg.Record = await conn.fetchrow(
                     self.__sql_queries["get_usable_cookie_set"],
+                    self.browser_type.value,
                     current_time,
                 )
                 if not row:
@@ -187,7 +208,7 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
 
         except Exception as e:
             # Transaction error comes here, automatically rollback
-            print(f"[coroutine_id={coroutine_id}]: Can't fetch cookie set:", e)
+            coroutine_print(coroutine_id, "Can't fetch cookie set:", e)
         finally:
             await self.pool.release(conn)
 
@@ -198,7 +219,7 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
         postcode: int,
         location: str,
         cookies: List[Cookie],
-        coroutine_id: uuid.UUID = uuid.uuid4(),
+        coroutine_id: uuid.UUID = None,
         lock: asyncio.Lock = None,
     ) -> bool:
         if lock is None:
@@ -207,7 +228,7 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
             return await self._add(postcode, location, cookies, coroutine_id)
 
     async def clean(
-        self, coroutine_id: uuid.UUID = uuid.uuid4(), lock: asyncio.Lock = None
+        self, coroutine_id: uuid.UUID = None, lock: asyncio.Lock = None
     ) -> None:
         if lock is None:
             return await self._clean(coroutine_id)
@@ -215,7 +236,7 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
             return await self._clean(coroutine_id)
 
     async def get(
-        self, coroutine_id: uuid.UUID = uuid.uuid4(), lock: asyncio.Lock = None
+        self, coroutine_id: uuid.UUID = None, lock: asyncio.Lock = None
     ) -> Optional[AmazonCookieSet]:
         if lock is None:
             return await self._get(coroutine_id)

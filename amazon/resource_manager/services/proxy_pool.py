@@ -1,67 +1,54 @@
-import json
-import aiofiles
+import uuid
+import asyncio
+
+from storages.proxy.base import ProxyStorage
+from storages.proxy.postgresql import PostgreSQLProxyStorage
 
 
 class ProxyPool:
-    def __init__(self):
-        self.proxies: list[str] = []
-        self.current_index: int = 0
+    _instance = None
 
-    def __len__(self):
-        return len(self.proxies)
+    def __new__(cls, storage: ProxyStorage = None) -> "ProxyPool":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialize(storage)
+        return cls._instance
+
+    def _initialize(
+        self,
+        storage: ProxyStorage = None,
+    ):
+        self._pool: ProxyStorage = None
+        if storage:
+            self._pool = storage
 
     @staticmethod
-    async def load_proxies(file_path: str) -> list[str]:
-        async with aiofiles.open(file_path, "r") as f:
-            # proxy file is an array-of-str JSON file
-            content: list[str] = json.load(f)
-            return content
+    def _is_initialized() -> bool:
+        return ProxyPool._instance is not None
 
-    async def init_proxy(self, proxy_file: str):
-        self.proxies = await self.load_proxies(proxy_file)
+    async def replace(
+        self,
+        proxies: list[str],
+        tag: str = None,
+        provider: str = "iproyal",
+        coroutine_id: uuid.UUID = None,
+        lock: asyncio.Lock = None,
+    ):
+        return await self._pool.replace(proxies, tag, provider, coroutine_id, lock)
 
-    async def get_proxy(self) -> tuple[str, dict]:
-        proxy_str = self.proxies[self.current_index % len(self.proxies)]
-        self.current_index += 1
+    async def pool_size(self, tag: str = None, provider: str = "iproyal"):
+        size = await self._pool.current_size(tag, provider)
+        return size
 
-        proxy_parts = proxy_str.split(":")
-        host, port, username, password = proxy_parts[:4]
-        proxy_url = f"http://{username}:{password}@{host}:{port}"
+    async def is_empty(self, tag: str = None, provider: str = "iproyal"):
+        return await self._pool.is_empty(tag, provider)
 
-        headers = {}
-        for part in proxy_parts[4:]:
-            if part.startswith("country-"):
-                headers["X-Country"] = part.split("-")[1]
-            elif part.startswith("session-"):
-                headers["X-Session"] = part.split("-")[1]
-            elif part.startswith("lifetime-"):
-                headers["X-Lifetime"] = part.split("-")[1]
-            elif part.startswith("state-"):
-                headers["X-State"] = part.split("-")[1]
-            elif part.startswith("streaming-"):
-                headers["X-Streaming"] = part.split("-")[1]
-
-        return proxy_url, headers
-
-    async def rotate_proxy(self):
-        self.current_index = (self.current_index + 1) % len(self.proxies)
-
-    async def pool_size(self):
-        return len(self.proxies)
-
-    async def is_empty(self):
-        return len(self.proxies) == 0
-
-
-# Example usage:
-async def example_usage():
-    proxy_pool = ProxyPool("setup/proxies.json")
-
-    # Get a proxy
-    proxy_url, headers = proxy_pool.get_proxy()
-    print(f"Proxy URL: {proxy_url}, Headers: {headers}")
-
-    # Rotate proxy
-    await proxy_pool.rotate_proxy()
-    proxy_url, headers = proxy_pool.get_proxy()
-    print(f"Rotated Proxy URL: {proxy_url}, Headers: {headers}")
+    async def rotate(
+        self,
+        tag: str = None,
+        provider: str = "iproyal",
+        coroutine_id: uuid.UUID = None,
+        lock: asyncio.Lock = None,
+    ):
+        cookie_set = await self._pool.rotate(tag, provider, coroutine_id, lock)
+        return cookie_set
