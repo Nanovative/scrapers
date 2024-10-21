@@ -1,3 +1,5 @@
+import uuid
+
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from models.enums import BrowserType
@@ -15,6 +17,7 @@ class Cookie(BaseModel):
 
 
 class AmazonCookieSet(BaseModel):
+    id: uuid.UUID = None
     postcode: int = None
     cookies: list[Cookie]
     location: str
@@ -24,6 +27,7 @@ class AmazonCookieSet(BaseModel):
 
 
 class AmazonCookieRequest(BaseModel):
+    request_id: uuid.UUID = uuid.uuid4()
     postcode: int = None
     include_html: bool = None
     is_headless: bool = None

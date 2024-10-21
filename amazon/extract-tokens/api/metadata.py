@@ -1,3 +1,5 @@
+import uuid
+
 from api import get_cookie_set_pool, event_queue
 from fastapi import APIRouter
 
@@ -15,6 +17,7 @@ async def get_amazon_cookie_pool_size():
         for browser_type in cookie_set_pool._browser_types
     }
     response = {
+        "request_id": uuid.uuid4(),
         "message": "ok",
         "size": pool_sizes,
     }
@@ -23,8 +26,10 @@ async def get_amazon_cookie_pool_size():
 
 @router.get("/queue/size")
 async def get_amazon_cookie_event_queue_size():
+
     queue_size = event_queue.qsize()
     response = {
+        "request_id": uuid.uuid4(),
         "message": "ok",
         "size": queue_size,
     }

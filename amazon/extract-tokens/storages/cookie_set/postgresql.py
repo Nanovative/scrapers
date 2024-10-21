@@ -1,9 +1,10 @@
 import json
+import uuid
 import asyncio
 import asyncpg
 
 from datetime import datetime
-from typing import TypeVar, Optional, List
+from typing import Optional, List
 from models.cookie import Cookie, AmazonCookieSet
 from storages.cookie_set.base import CookieSetStorage
 
@@ -89,7 +90,13 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
     def max_size(self):
         return self.max_cookie_set
 
-    async def _add(self, postcode: int, location: str, cookies: List[Cookie]) -> bool:
+    async def _add(
+        self,
+        postcode: int,
+        location: str,
+        cookies: List[Cookie],
+        coroutine_id: uuid.UUID = uuid.uuid4(),
+    ) -> bool:
         item = AmazonCookieSet(
             postcode=postcode,
             cookies=cookies,
@@ -111,14 +118,14 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
                 )
         except Exception as e:
             # Transaction error comes here, automatically rollback
-            print("Can't add cookie set to pool:", e)
+            print(f"[coroutine_id={coroutine_id}]: Can't add cookie set to pool:", e)
             is_success = False
         finally:
             await self.pool.release(conn)
 
         return is_success
 
-    async def _clean(self) -> None:
+    async def _clean(self, coroutine_id: uuid.UUID = uuid.uuid4()) -> None:
         conn: asyncpg.connection.Connection = await self.pool.acquire()
         try:
             async with conn.transaction() as tx:
@@ -128,12 +135,14 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
                 )
         except Exception as e:
             # Transaction error comes here, automatically rollback
-            print("Can't clean cookie sets:", e)
+            print(f"[coroutine_id={coroutine_id}]: Can't clean cookie sets:", e)
 
         finally:
             await self.pool.release(conn)
 
-    async def _get(self) -> Optional[AmazonCookieSet]:
+    async def _get(
+        self, coroutine_id: uuid.UUID = uuid.uuid4()
+    ) -> Optional[AmazonCookieSet]:
         conn: asyncpg.connection.Connection = await self.pool.acquire()
         cookie_set = None
         current_time = datetime.now()
@@ -146,7 +155,9 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
                 if not row:
                     raise Exception("No cookie set found")
 
+                cookie_set_id = row["id"]
                 cookie_set = AmazonCookieSet(
+                    id=cookie_set_id,
                     postcode=row["postcode"],
                     location=row["location"],
                     cookies=json.loads(row["cookies"]),
@@ -161,7 +172,7 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
 
         except Exception as e:
             # Transaction error comes here, automatically rollback
-            print("Can't fetch cookie set:", e)
+            print(f"[coroutine_id={coroutine_id}]: Can't fetch cookie set:", e)
         finally:
             await self.pool.release(conn)
 
@@ -172,24 +183,29 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
         postcode: int,
         location: str,
         cookies: List[Cookie],
+        coroutine_id: uuid.UUID = uuid.uuid4(),
         lock: asyncio.Lock = None,
     ) -> bool:
         if lock is None:
-            return await self._add(postcode, location, cookies)
+            return await self._add(postcode, location, cookies, coroutine_id)
         async with lock:
-            return await self._add(postcode, location, cookies)
+            return await self._add(postcode, location, cookies, coroutine_id)
 
-    async def clean(self, lock: asyncio.Lock = None) -> None:
+    async def clean(
+        self, coroutine_id: uuid.UUID = uuid.uuid4(), lock: asyncio.Lock = None
+    ) -> None:
         if lock is None:
-            return await self._clean()
+            return await self._clean(coroutine_id)
         async with lock:
-            return await self._clean()
+            return await self._clean(coroutine_id)
 
-    async def get(self, lock: asyncio.Lock = None) -> Optional[AmazonCookieSet]:
+    async def get(
+        self, coroutine_id: uuid.UUID = uuid.uuid4(), lock: asyncio.Lock = None
+    ) -> Optional[AmazonCookieSet]:
         if lock is None:
-            return await self._get()
+            return await self._get(coroutine_id)
         async with lock:
-            return await self._get()
+            return await self._get(coroutine_id)
 
     async def is_full(self) -> bool:
         return (await self.current_size()) >= self.max_size()

@@ -1,3 +1,4 @@
+import uuid
 import asyncio
 
 from datetime import datetime
@@ -109,6 +110,7 @@ class LinkedListCookieSetStorage(CookieSetStorage):
 
     async def _add(self, postcode: int, location: str, cookies: list[Cookie]) -> bool:
         item = AmazonCookieSet(
+            id=uuid.uuid4(),
             postcode=postcode,
             cookies=cookies,
             location=location,
