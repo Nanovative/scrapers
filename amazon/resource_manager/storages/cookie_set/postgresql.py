@@ -11,6 +11,11 @@ from storages.cookie_set.base import CookieSetStorage
 
 class PostgreSQLCookieSetStorage(CookieSetStorage):
     __sql_queries = {
+        "check_schema": """
+            SELECT nspname
+            FROM "pg_catalog"."pg_namespace"
+            WHERE nspname = 'scraping';
+        """,
         "init_schema": """
             CREATE SCHEMA IF NOT EXISTS scraping;
         """,
@@ -58,20 +63,30 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
     ) -> None:
         self.conn_str = conn_str
         self.max_conn = max_conn
+        self.min_conn = min(2, self.max_conn)
         self.max_cookie_set = max_cookie_set
         self.pool: asyncpg.Pool = None
 
     async def initialize(self):
         pool = await asyncpg.create_pool(
-            self.conn_str, min_size=max(2, self.max_conn), max_size=self.max_conn
+            dsn=self.conn_str,
+            min_size=self.min_conn,
+            max_size=self.max_conn,
         )
+        try:
+            schema_check = await pool.fetchrow(self.__sql_queries["check_schema"])
+            if schema_check is None:
+                print("Schema is not present, creating one ...")
+                await pool.execute(self.__sql_queries["init_schema"])
+        except Exception as e:
+            pass
+            
         conn: asyncpg.connection.Connection = await pool.acquire()
         is_success = True
         try:
-            await conn.execute(self.__sql_queries["init_schema"])
             await conn.execute(self.__sql_queries["init_table"])
         except Exception as e:
-            print("Got an exception:", e)
+            print("Got problem when initializing cookie set storage:", e)
             is_success = False
         finally:
             await pool.release(conn)

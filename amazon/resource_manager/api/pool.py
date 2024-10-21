@@ -41,6 +41,9 @@ async def fill_amazon_cookies(body: AmazonCookieRequest):
     response = await _get_new(body)
     cookie_set_pool = await get_cookie_set_pool()
 
+    if response["message"] != "ok":
+        return {"request_id": body.request_id, **response, "pool_add_ok": False}
+
     old_pool_size = await cookie_set_pool.pool_size(body.browser_type)
 
     pool_add_ok = await cookie_set_pool.add(
