@@ -2,7 +2,6 @@ import uuid
 import asyncio
 
 from storages.proxy.base import ProxyStorage
-from storages.proxy.postgresql import PostgreSQLProxyStorage
 
 
 class ProxyPool:
@@ -11,10 +10,10 @@ class ProxyPool:
     def __new__(cls, storage: ProxyStorage = None) -> "ProxyPool":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._initialize(storage)
+            cls._instance.initialize(storage)
         return cls._instance
 
-    def _initialize(
+    def initialize(
         self,
         storage: ProxyStorage = None,
     ):
@@ -23,7 +22,7 @@ class ProxyPool:
             self._pool = storage
 
     @staticmethod
-    def _is_initialized() -> bool:
+    def is_initialized() -> bool:
         return ProxyPool._instance is not None
 
     async def replace(

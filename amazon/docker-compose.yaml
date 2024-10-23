@@ -1,15 +1,15 @@
 services:
-  resource-manager:
-    image: amazon-resource-manager:latest
+  scraping-backend:
+    image: amazon-scraping-backend:latest
     build:
-      context: ./resource_manager
+      context: ./src
     ports:
       - "8000:8000"
     environment:
       - POSTGRESQL_CONN_STR=${POSTGRESQL_CONN_STR:-postgresql://admin:123@postgres:5432/postgres}
     ipc: host  # This sets the IPC mode
     security_opt:
-      - seccomp=./resource_manager/seccomp_profile.json  # This specifies the seccomp profile
+      - seccomp=./src/seccomp_profile.json  # This specifies the seccomp profile
 
     command: python3 main.py api
 

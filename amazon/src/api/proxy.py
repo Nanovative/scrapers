@@ -6,6 +6,7 @@ from api import get_proxy_pool, event_loop_lock
 
 router = APIRouter()
 
+
 @router.post("/replace")
 async def replace_proxy(body: ProxyRequest):
     request_id = uuid.uuid4()
@@ -46,6 +47,7 @@ async def rotate_proxy(body: ProxyRequest):
         response["proxies"] = [proxy]
 
     return response
+
 
 @router.post("/format")
 async def rotate_proxy(body: str = Body(..., media_type="text/plain")):

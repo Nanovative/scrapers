@@ -1,6 +1,6 @@
 import asyncio
 
-from services.amazon_cookie_pool import AmazonCookieSetPool
+from services.cookie_set_pool import AmazonCookieSetPool
 from services.proxy_pool import ProxyPool
 from models.enums import BrowserType
 from factories.storage_factory import cookie_set_storage_factory, proxy_storage_factory
@@ -11,7 +11,7 @@ event_loop_lock = asyncio.Lock()
 
 
 async def get_cookie_set_pool():
-    if not AmazonCookieSetPool._is_initialized():
+    if not AmazonCookieSetPool.is_initialized():
         storages = await cookie_set_storage_factory(
             {
                 BrowserType.firefox: {
@@ -36,7 +36,7 @@ async def get_cookie_set_pool():
 
 
 async def get_proxy_pool():
-    if not ProxyPool._is_initialized():
+    if not ProxyPool.is_initialized():
         storage = await proxy_storage_factory(
             {
                 "pool_args": {

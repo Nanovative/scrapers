@@ -1,7 +1,8 @@
 import uuid
 
 from fastapi import APIRouter
-from services.amazon_cookie_pool import get_amazon_cookies, AmazonCookieRequest
+from services.cookie_set_pool import AmazonCookieRequest
+from services.cookie import get_cookies
 from api import get_cookie_set_pool, event_loop_lock
 from utils import request_print
 
@@ -10,7 +11,7 @@ router = APIRouter()
 
 async def _get_new(body: AmazonCookieRequest):
     request_print(body.request_id, "Execute new playwright request")
-    return await get_amazon_cookies(body)
+    return await get_cookies(body)
 
 
 async def _fetch_cookie_pool(body: AmazonCookieRequest):

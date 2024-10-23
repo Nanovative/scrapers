@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 
-from services.amazon_cookie_pool import start_add_task, start_cleanup_task
+from services.cookie_set_pool import start_add_task, start_cleanup_task
 from api import event_queue, event_loop_lock, get_cookie_set_pool
 
 
