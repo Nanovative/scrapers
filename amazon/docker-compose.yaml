@@ -1,17 +1,17 @@
 services:
-  scraping-backend:
-    image: amazon-scraping-backend:latest
+  scraper-api:
+    image: amazon-scraper-api:latest
     build:
-      context: ./src
+      dockerfile: api.Dockerfile
     ports:
       - "8000:8000"
     environment:
       - POSTGRESQL_CONN_STR=${POSTGRESQL_CONN_STR:-postgresql://admin:123@postgres:5432/postgres}
     ipc: host  # This sets the IPC mode
     security_opt:
-      - seccomp=./src/seccomp_profile.json  # This specifies the seccomp profile
+      - seccomp=./shared/seccomp_profile.json  # This specifies the seccomp profile
 
-    command: python3 main.py api
+    command: python3 main.py
 
   postgres:
     image: postgres:16
