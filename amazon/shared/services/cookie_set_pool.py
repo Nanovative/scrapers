@@ -9,7 +9,8 @@ from shared.storages.cookie_set.base import CookieSetStorage
 from shared.services.cookie import get_cookies
 
 postcode_pool = [
-    99501,  # Anchorage
+    90210,  # Beverly Hills
+    # 99501,  # Anchorage
     # 93311,  # Bakersfield
     # 71601,  # Pine Bluff
     # 11001,  # Floral Park

@@ -5,6 +5,7 @@ import asyncpg
 from asyncio import Lock
 from datetime import datetime
 from typing import Optional
+from shared.models.enums import ProxyType
 from shared.models.proxy import Proxy
 from shared.storages.proxy.base import ProxyStorage
 
@@ -23,6 +24,7 @@ class PostgreSQLProxyStorage(ProxyStorage):
             CREATE TABLE IF NOT EXISTS "scraping"."proxies" (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tag VARCHAR(20) NOT NULL DEFAULT 'general',
+                proxy_type VARCHAR(20) NOT NULL,
                 content VARCHAR(255),
                 provider VARCHAR(50),
                 created_at TIMESTAMP DEFAULT NOW(),
@@ -31,19 +33,21 @@ class PostgreSQLProxyStorage(ProxyStorage):
         """,
         "get_unique_tags": """
             SELECT DISTINCT tag
-            FROM "scraping"."proxies";
+            FROM "scraping"."proxies"
+            WHERE proxy_type = $1;
         """,
         "insert": """
             INSERT INTO "scraping"."proxies" (
                 tag,
+                proxy_type,
                 provider,
                 created_at,
                 content
-            ) VALUES ($1, $2, $3, $4);
+            ) VALUES ($1, $2, $3, $4, $5);
         """,
         "delete": """
             DELETE FROM "scraping"."proxies"
-            WHERE tag = $1 AND provider = $2;
+            WHERE tag = $1 AND proxy_type = $2 AND provider = $3;
         """,
         "update_proxy": """
             UPDATE "scraping"."proxies" 
@@ -53,14 +57,14 @@ class PostgreSQLProxyStorage(ProxyStorage):
         "get_LRU_proxy": """
             SELECT id, content 
             FROM "scraping"."proxies"
-            WHERE tag = $1 AND provider = $2
+            WHERE tag = $1 AND proxy_type = $2 AND provider = $3
             ORDER BY COALESCE(last_used, '1900-01-01') ASC
             LIMIT 1;
         """,
         "get_count": """
             SELECT COUNT(*)
             FROM "scraping"."proxies"
-            WHERE tag = $1 AND provider = $2
+            WHERE tag = $1 AND proxy_type = $2 AND provider = $3
         """,
     }
 
@@ -110,18 +114,10 @@ class PostgreSQLProxyStorage(ProxyStorage):
     async def close(self):
         await self.pool.close()
 
-    async def current_size(self, tag: str = None, provider: str = "iproyal") -> int:
-        tag = self.default_tag if not tag else tag
-        record: asyncpg.Record = await self.pool.fetchrow(
-            self.sql_queries["get_count"],
-            tag,
-            provider,
-        )
-        return record[0]
-
     async def _rotate(
         self,
         tag: str = None,
+        proxy_type: str = ProxyType.dynamic.value,
         provider: str = "iproyal",
         coroutine_id: uuid.UUID = None,
     ) -> Optional[Proxy]:
@@ -134,6 +130,7 @@ class PostgreSQLProxyStorage(ProxyStorage):
                 row: asyncpg.Record = await conn.fetchrow(
                     self.sql_queries["get_LRU_proxy"],
                     tag,
+                    proxy_type,
                     provider,
                 )
                 if not row:
@@ -160,6 +157,7 @@ class PostgreSQLProxyStorage(ProxyStorage):
     async def _replace(
         self,
         proxies: list[str],
+        proxy_type: str = ProxyType.dynamic.value,
         tag: str = None,
         provider: str = "iproyal",
         coroutine_id: uuid.UUID = None,
@@ -174,12 +172,16 @@ class PostgreSQLProxyStorage(ProxyStorage):
                 await conn.execute(
                     self.sql_queries["delete"],
                     tag,
+                    proxy_type,
                     provider,
                 )
 
                 await conn.executemany(
                     self.sql_queries["insert"],
-                    [(tag, provider, current_time, proxy) for proxy in proxies],
+                    [
+                        (tag, proxy_type, provider, current_time, proxy)
+                        for proxy in proxies
+                    ],
                 )
 
         except Exception as e:
@@ -208,28 +210,52 @@ class PostgreSQLProxyStorage(ProxyStorage):
 
     async def rotate(
         self,
+        /,
         tag: str = None,
+        proxy_type: str = ProxyType.dynamic.value,
         provider: str = "iproyal",
         coroutine_id: uuid.UUID = None,
         lock: Lock = None,
     ) -> Optional[Proxy]:
         if lock is None:
-            return await self._rotate(tag, provider, coroutine_id)
+            return await self._rotate(tag, proxy_type, provider, coroutine_id)
         async with lock:
-            return await self._rotate(tag, provider, coroutine_id)
+            return await self._rotate(tag, proxy_type, provider, coroutine_id)
 
     async def replace(
         self,
         proxies: list[str],
+        /,
+        proxy_type: str = ProxyType.dynamic.value,
         tag: str = None,
         provider: str = "iproyal",
         coroutine_id: uuid.UUID = None,
         lock: Lock = None,
     ) -> bool:
         if lock is None:
-            return await self._replace(proxies, tag, provider, coroutine_id)
+            return await self._replace(proxies, proxy_type, tag, provider, coroutine_id)
         async with lock:
-            return await self._replace(proxies, tag, provider, coroutine_id)
+            return await self._replace(proxies, proxy_type, tag, provider, coroutine_id)
 
-    async def is_empty(self, tag: str = None, provider: str = "iproyal") -> bool:
-        return (await self.current_size(tag, provider)) == 0
+    async def is_empty(
+        self,
+        tag: str = None,
+        proxy_type: str = ProxyType.dynamic.value,
+        provider: str = "iproyal",
+    ) -> bool:
+        return (await self.current_size(tag, proxy_type, provider)) == 0
+
+    async def current_size(
+        self,
+        tag: str = None,
+        proxy_type: str = ProxyType.dynamic.value,
+        provider: str = "iproyal",
+    ) -> int:
+        tag = self.default_tag if not tag else tag
+        record: asyncpg.Record = await self.pool.fetchrow(
+            self.sql_queries["get_count"],
+            tag,
+            proxy_type,
+            provider,
+        )
+        return record[0]

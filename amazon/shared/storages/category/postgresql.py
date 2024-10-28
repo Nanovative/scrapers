@@ -35,8 +35,15 @@ class PostgreSQLCategoryStorage(CategoryStorage):
             WHERE name = $1;
         """,
         "get_by_depth": """
-            SELECT * FROM "scraping"."amazon_categories"
-            WHERE depth <= $1;
+            SELECT * 
+            FROM "scraping"."amazon_categories"
+            WHERE depth <= $1
+            ORDER BY depth DESC;
+        """,
+        "get_by_exact_depth": """
+            SELECT * 
+            FROM "scraping"."amazon_categories"
+            WHERE depth = $1;
         """,
         "get_by_ancestor": """
             SELECT * FROM "scraping"."amazon_categories"
@@ -198,23 +205,28 @@ class PostgreSQLCategoryStorage(CategoryStorage):
     async def get_by_depth(
         self,
         depth: int,
+        strict: bool = False,
         coroutine_id: uuid.UUID = None,
         lock: Lock = None,
-    ) -> List[Category]:
+    ) -> tuple[List[Category], int]:
         if lock is None:
-            return await self._get_by_depth(depth, coroutine_id)
+            return await self._get_by_depth(depth, strict, coroutine_id)
         async with lock:
-            return await self._get_by_depth(depth, coroutine_id)
+            return await self._get_by_depth(depth, strict, coroutine_id)
 
     async def _get_by_depth(
         self,
         depth: int,
+        strict: bool = False,
         coroutine_id: uuid.UUID = None,
-    ) -> List[Category]:
+    ) -> tuple[List[Category], int]:
         conn: asyncpg.Connection = await self.pool.acquire()
         categories = []
         try:
-            rows = await conn.fetch(self.sql_queries["get_by_depth"], depth)
+            sql_query = self.sql_queries[
+                "get_by_exact_depth" if strict else "get_by_depth"
+            ]
+            rows = await conn.fetch(sql_query, depth)
             categories = [
                 Category(
                     id=row["id"],
@@ -235,7 +247,7 @@ class PostgreSQLCategoryStorage(CategoryStorage):
         finally:
             await self.pool.release(conn)
 
-        return categories
+        return categories, len(categories)
 
     async def get_by_ancestor(
         self,

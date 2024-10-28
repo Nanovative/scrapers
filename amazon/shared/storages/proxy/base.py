@@ -3,6 +3,7 @@ import asyncio
 
 from abc import ABC, abstractmethod
 from typing import Optional
+from shared.models.enums import ProxyType
 from shared.models.proxy import Proxy
 
 
@@ -12,6 +13,8 @@ class ProxyStorage(ABC):
     async def replace(
         self,
         proxies: list[str],
+        /,
+        proxy_type: str,
         tag: str = None,
         provider: str = "iproyal",
         coroutine_id: uuid.UUID = None,
@@ -26,7 +29,9 @@ class ProxyStorage(ABC):
     @abstractmethod
     async def rotate(
         self,
+        /,
         tag: str = None,
+        proxy_type: str = ProxyType.dynamic.value,
         provider: str = "iproyal",
         coroutine_id: uuid.UUID = None,
         lock: asyncio.Lock = None,
@@ -34,9 +39,19 @@ class ProxyStorage(ABC):
         pass
 
     @abstractmethod
-    async def current_size(self, tag: str = None, provider: str = "iproyal") -> int:
+    async def current_size(
+        self,
+        tag: str = None,
+        proxy_type: str = ProxyType.dynamic.value,
+        provider: str = "iproyal",
+    ) -> int:
         pass
 
     @abstractmethod
-    async def is_empty(self, tag: str = None, provider: str = "iproyal") -> bool:
+    async def is_empty(
+        self,
+        tag: str = None,
+        proxy_type: str = ProxyType.dynamic.value,
+        provider: str = "iproyal",
+    ) -> bool:
         pass

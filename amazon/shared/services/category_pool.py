@@ -45,10 +45,11 @@ class CategoryPool:
     async def get_by_depth(
         self,
         depth: int,
+        strict: bool,
         coroutine_id: uuid.UUID = None,
         lock: asyncio.Lock = None,
-    ) -> list[Category]:
-        return await self._pool.get_by_depth(depth, coroutine_id, lock)
+    ) -> tuple[list[Category], int]:
+        return await self._pool.get_by_depth(depth, strict, coroutine_id, lock)
 
     async def get_by_ancestor(
         self,

@@ -28,26 +28,49 @@ class ProxyPool:
     async def replace(
         self,
         proxies: list[str],
+        proxy_type: str,
         tag: str = None,
         provider: str = "iproyal",
         coroutine_id: uuid.UUID = None,
         lock: asyncio.Lock = None,
     ):
-        return await self._pool.replace(proxies, tag, provider, coroutine_id, lock)
+        return await self._pool.replace(
+            proxies,
+            proxy_type=proxy_type,
+            tag=tag,
+            provider=provider,
+            coroutine_id=coroutine_id,
+            lock=lock,
+        )
 
-    async def pool_size(self, tag: str = None, provider: str = "iproyal"):
-        size = await self._pool.current_size(tag, provider)
+    async def pool_size(
+        self, proxy_type: str, tag: str = None, provider: str = "iproyal"
+    ):
+        size = await self._pool.current_size(
+            tag=tag, proxy_type=proxy_type, provider=provider
+        )
         return size
 
-    async def is_empty(self, tag: str = None, provider: str = "iproyal"):
-        return await self._pool.is_empty(tag, provider)
+    async def is_empty(
+        self, proxy_type: str, tag: str = None, provider: str = "iproyal"
+    ):
+        return await self._pool.is_empty(
+            tag=tag, proxy_type=proxy_type, provider=provider
+        )
 
     async def rotate(
         self,
+        proxy_type: str,
         tag: str = None,
         provider: str = "iproyal",
         coroutine_id: uuid.UUID = None,
         lock: asyncio.Lock = None,
     ):
-        cookie_set = await self._pool.rotate(tag, provider, coroutine_id, lock)
+        cookie_set = await self._pool.rotate(
+            tag=tag,
+            proxy_type=proxy_type,
+            provider=provider,
+            coroutine_id=coroutine_id,
+            lock=lock,
+        )
         return cookie_set

@@ -23,7 +23,7 @@ async def get_cookie_set_pool():
                     "pool_args": {
                         "conn_str": getenv("POSTGRESQL_CONN_STR", None),
                         "max_conn": 2,
-                        "max_cookie_set": 5,
+                        "max_cookie_set": 20,
                     },
                     "pool_type": "postgresql",
                 }

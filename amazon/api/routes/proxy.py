@@ -15,7 +15,7 @@ async def replace_proxy(body: ProxyRequest):
     proxy_pool = await get_proxy_pool()
 
     is_ok = await proxy_pool.replace(
-        body.proxies, body.tag, body.provider, None, event_loop_lock
+        body.proxies, body.proxy_type, body.tag, body.provider, None, event_loop_lock
     )
 
     response = {
@@ -32,7 +32,9 @@ async def rotate_proxy(body: ProxyRequest):
     body.request_id = request_id
 
     proxy_pool = await get_proxy_pool()
-    proxy = await proxy_pool.rotate(body.tag, body.provider, None, event_loop_lock)
+    proxy = await proxy_pool.rotate(
+        body.proxy_type, body.tag, body.provider, None, event_loop_lock
+    )
 
     response = {
         "request_id": body.request_id,
@@ -50,7 +52,7 @@ async def rotate_proxy(body: ProxyRequest):
 
 
 @router.post("/format")
-async def rotate_proxy(body: str = Body(..., media_type="text/plain")):
+async def format_proxy(body: str = Body(..., media_type="text/plain")):
     request_id = uuid.uuid4()
 
     proxies = [line.strip("\r") for line in body.split("\n")]

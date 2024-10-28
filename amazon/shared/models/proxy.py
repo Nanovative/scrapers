@@ -2,7 +2,7 @@ import uuid
 
 from pydantic import BaseModel
 from datetime import datetime
-from shared.models.enums import BrowserType
+from shared.models.enums import ProxyType
 
 
 class Proxy(BaseModel):
@@ -15,5 +15,6 @@ class Proxy(BaseModel):
 class ProxyRequest(BaseModel):
     request_id: uuid.UUID = None
     provider: str
+    proxy_type: ProxyType = ProxyType.dynamic
     tag: str = None
     proxies: list[str] = []

@@ -39,15 +39,18 @@ async def get_category_by_name(name: str):
 
 
 @router.get("/get_by_depth")
-async def get_category_by_depth(depth: int):
+async def get_category_by_depth(depth: int, strict: bool = False):
     request_id = uuid.uuid4()
 
     category_pool = await get_category_pool()
-    categories = await category_pool.get_by_depth(depth, None, event_loop_lock)
+    categories, num_of_categories = await category_pool.get_by_depth(
+        depth, strict, None, event_loop_lock
+    )
 
     response = {
         "request_id": request_id,
         "categories": categories,
+        "count": num_of_categories,
     }
 
     return response

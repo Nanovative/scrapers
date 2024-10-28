@@ -3,11 +3,13 @@ import json
 import asyncio
 import logging
 import aiofiles
+import curl_cffi
 
-from cookies import cookies as static_cookies
 from typing import Any
+from curl_cffi.requests import AsyncSession
+
 from urllib.parse import urlparse, parse_qs, urlencode
-from utils import AsyncSafeDict
+from shared.utils import AsyncSafeDict
 
 from playwright.async_api import (
     Page,
@@ -20,8 +22,25 @@ from playwright.async_api import (
 )
 
 ROOT_URL = "https://amazon.com"
-OUT_DIR = "./json"
+OUT_DIR = "./data/"
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 
+
+async def get_cookies():
+    async with AsyncSession(http_version=curl_cffi.CurlHttpVersion.V1_1) as session:
+        resp = await session.post(
+            f"{API_URL}/cookie/fetch",
+            json={
+                "browser_type": "firefox",
+                "do_fetch_pool": True,
+            },
+        )
+        data = resp.json()
+
+        cookies: list[Cookie] = data["cookies"]
+        postcode: int = data["postcode"]
+
+        return (cookies, postcode), resp.status_code
 
 async def init_browser(
     is_headless: bool, browser_type_str: str, cookies: list[Cookie] = None
@@ -254,8 +273,9 @@ async def scrape_category_tree(
     os.makedirs(OUT_DIR, exist_ok=True)
 
     data = {}
+    (cookies, _), _ = await get_cookies()
     p, browser, context = await init_browser(
-        is_headless, browser_type_str, static_cookies
+        is_headless, browser_type_str, cookies
     )
     # Create a separate page
     event_loop = asyncio.get_running_loop()

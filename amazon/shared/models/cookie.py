@@ -22,7 +22,7 @@ class AmazonCookieSet(BaseModel):
     cookies: list[Cookie]
     location: str
     expires: datetime
-    usable_times: int = 5
+    usable_times: int = 8
     last_used: datetime = None
 
 

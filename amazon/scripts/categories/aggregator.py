@@ -7,7 +7,7 @@ from shared.services.category_pool import CategoryPool
 from shared.models.category import Category
 from shared.storages.category.postgresql import PostgreSQLCategoryStorage
 
-OUT_DIR = "./json"
+OUT_DIR = "./data/"
 
 
 def explore_with_depth(
@@ -69,6 +69,7 @@ def get_filenames():
         for filename in os.listdir(OUT_DIR)
         if ".json" in filename
         and "\uf07c" not in filename
+        and "|" not in filename
         and "processed" not in filename
         and "final" not in filename
     ]

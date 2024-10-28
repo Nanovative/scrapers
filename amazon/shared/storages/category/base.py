@@ -30,9 +30,10 @@ class CategoryStorage(ABC):
     async def get_by_depth(
         self,
         depth: int,
+        strict: bool,
         coroutine_id: uuid.UUID = None,
         lock: asyncio.Lock = None,
-    ) -> List[Category]:
+    ) -> tuple[List[Category], int]:
         pass
 
     @abstractmethod
