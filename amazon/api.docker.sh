@@ -1,8 +1,10 @@
 #!/bin/bash
+sh init.sh
 
 docker stop amazon-scraper-api
 docker rm amazon-scraper-api
-docker build --tag amazon-scraper-api:latest --file api.Dockerfile .
+
+docker build --tag amazon-scraper-api:latest --file Dockerfile.api .
 docker run \
     -it \
     --name=amazon-scraper-api \

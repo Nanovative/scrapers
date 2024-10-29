@@ -1,4 +1,5 @@
 import json
+import random
 import asyncio
 
 from filelock import FileLock
@@ -40,3 +41,13 @@ def load_json_file(file_path: str):
     with FileLock(lock_path):
         with open(file_path, "r") as file:
             return json.load(file)
+
+
+def run_event_loop(loop: asyncio.AbstractEventLoop):
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+
+async def sleep_randomly(start: float, end: float):
+    delay = random.uniform(start, end)
+    await asyncio.sleep(delay)

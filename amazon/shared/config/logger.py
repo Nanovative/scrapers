@@ -1,8 +1,11 @@
+import sys
 import asyncio
 import logging
-import sys
-from logging.handlers import QueueHandler, QueueListener
+import threading
+
 from queue import SimpleQueue
+from shared.utils import run_event_loop
+from logging.handlers import QueueHandler, QueueListener
 
 # Initialize a queue for log records (helps with async and thread-safety)
 log_queue = SimpleQueue()
@@ -63,3 +66,14 @@ async def safely_start_logger():
         LOGGER_TASK = asyncio.create_task(init_logger())
     # allow the logger to start
     await asyncio.sleep(0)
+
+
+def setup_logger():
+    # Setup logger
+    background_loop = asyncio.new_event_loop()
+    thread = threading.Thread(
+        target=run_event_loop, args=(background_loop,), daemon=True
+    )
+    thread.start()
+    future = asyncio.run_coroutine_threadsafe(safely_start_logger(), background_loop)
+    future.result()

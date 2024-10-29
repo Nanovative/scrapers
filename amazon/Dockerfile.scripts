@@ -1,0 +1,7 @@
+FROM amazon-scraper-base AS scripts
+
+COPY scripts /app/scripts
+COPY shared /app/shared
+
+WORKDIR /app/scripts
+

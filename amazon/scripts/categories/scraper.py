@@ -42,6 +42,7 @@ async def get_cookies():
 
         return (cookies, postcode), resp.status_code
 
+
 async def init_browser(
     is_headless: bool, browser_type_str: str, cookies: list[Cookie] = None
 ):
@@ -274,9 +275,7 @@ async def scrape_category_tree(
 
     data = {}
     (cookies, _), _ = await get_cookies()
-    p, browser, context = await init_browser(
-        is_headless, browser_type_str, cookies
-    )
+    p, browser, context = await init_browser(is_headless, browser_type_str, cookies)
     # Create a separate page
     event_loop = asyncio.get_running_loop()
     try:

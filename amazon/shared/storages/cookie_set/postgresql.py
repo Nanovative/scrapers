@@ -45,10 +45,11 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
                 postcode, 
                 location, 
                 cookies, 
-                expires, 
+                expires,
+                usable_times,
                 browser_type
             )
-            VALUES($1, $2, $3, $4, $5);
+            VALUES($1, $2, $3, $4, $5, $6);
         """,
         "cleanup": """
             DELETE FROM "scraping"."amazon_cookie_sets" 
@@ -150,6 +151,7 @@ class PostgreSQLCookieSetStorage(CookieSetStorage):
                     location,
                     json.dumps(cookies),
                     item.expires,
+                    item.usable_times,
                     self.browser_type.value,
                 )
         except Exception as e:

@@ -1,0 +1,6 @@
+FROM amazon-scraper-base AS api
+
+COPY api /app/api
+COPY shared /app/shared
+
+WORKDIR /app/api
