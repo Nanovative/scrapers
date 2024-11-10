@@ -43,7 +43,8 @@ class PostgreSQLCategoryStorage(CategoryStorage):
         "get_by_exact_depth": """
             SELECT * 
             FROM "scraping"."amazon_categories"
-            WHERE depth = $1;
+            WHERE depth = $1
+            ORDER BY name ASC;
         """,
         "get_by_ancestor": """
             SELECT * FROM "scraping"."amazon_categories"

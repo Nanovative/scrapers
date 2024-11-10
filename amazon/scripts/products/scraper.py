@@ -2,6 +2,7 @@ import __init__
 from __init__ import DEFAULT_DATA_DIR, DEFAULT_OUT_DIR
 
 import os
+import json
 import asyncio
 import logging
 import aiofiles
@@ -79,7 +80,7 @@ def preprocess_url_parts(category_url: str):
         for k, v in urlparser.parse_qs(original_qs).items()
         if k in {"rh", "fs", "i"}
     }
-    base_url = "https://amazon.com/s/query"
+    base_url = "https://www.amazon.com/s/query"
     return base_url, original_qs
 
 
@@ -139,6 +140,13 @@ async def process_category_page(
         )
         return page, True, 403
 
+    payload = json.dumps(
+        {
+            "prefetch-type": "rq",
+            "customer-action": "pagination",
+        }
+    )
+
     async with AsyncSession(
         cookies=cookies,
         headers=headers,
@@ -148,10 +156,8 @@ async def process_category_page(
             resp = await session.request(
                 method="POST",
                 url=url,
-                cookies=cookies,
-                headers=headers,
-                proxies=proxies,
                 timeout=60,
+                data=payload,
             )
         except curl_cffi.curl.CurlError as e:
             logging.error(
@@ -212,9 +218,6 @@ async def process_category(
     if page_start < 1:
         page_start = 1
 
-    if page_end > 45:
-        page_end = 45
-
     should_stop = asyncio.Event()
 
     base, qs = preprocess_url_parts(category.url)
@@ -273,14 +276,14 @@ async def execute_pipeline(
 ):
     page_start, page_end, batch_size = start, end, step
     max_page_per_category = stop
-    if max_page_per_category is None:
-        max_page_per_category = 60
 
     tasks = []
 
-    max_tasks = 50
+    max_tasks = 25
 
-    while page_start <= page_end and page_start <= max_page_per_category:
+    while page_start <= page_end and (
+        max_page_per_category is None or page_start <= max_page_per_category
+    ):
         logging.info(f"Start pipeline [{page_start}, {page_end}, {batch_size}]")
         task = asyncio.create_task(
             product_scraping_pipeline(
@@ -289,7 +292,7 @@ async def execute_pipeline(
                 batch_size=batch_size,
                 max_depth=depth,
                 max_page_per_category=max_page_per_category,
-                max_categories_per_depth=None,
+                max_categories_per_depth=1,
                 overwrite=overwrite,
             )
         )
@@ -336,17 +339,20 @@ async def product_scraping_pipeline(
             f"Current number of categories at depth {depth}: {num_of_categories}"
         )
 
-        if max_page_per_category and max_page_per_category <= page_end:
+        if (
+            page_end != -1
+            and max_page_per_category
+            and max_page_per_category <= page_end
+        ):
             page_end = min(max_page_per_category, 45)
 
         if not page_start:
             page_start = 1
-        elif page_start > page_end:
+
+        if page_start > page_end:
             page_start = page_end
 
-        if batch_size >= page_end:
-            batch_size = page_end
-        elif not batch_size:
+        if not batch_size:
             batch_size = 15
 
         if max_categories_per_depth:

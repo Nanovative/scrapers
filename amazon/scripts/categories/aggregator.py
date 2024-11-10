@@ -1,3 +1,5 @@
+from __init__ import DEFAULT_DATA_DIR, DEFAULT_OUT_DIR
+
 import os
 import uuid
 import json
@@ -7,7 +9,7 @@ from shared.services.category_pool import CategoryPool
 from shared.models.category import Category
 from shared.storages.category.postgresql import PostgreSQLCategoryStorage
 
-OUT_DIR = "./data/"
+OUT_DIR = DEFAULT_DATA_DIR
 
 
 def explore_with_depth(
@@ -65,8 +67,8 @@ def process_node(node: dict, processed: set):
 
 def get_filenames():
     return [
-        os.path.join(OUT_DIR, filename)
-        for filename in os.listdir(OUT_DIR)
+        os.path.join(DEFAULT_DATA_DIR, filename)
+        for filename in os.listdir(DEFAULT_DATA_DIR)
         if ".json" in filename
         and "\uf07c" not in filename
         and "|" not in filename
@@ -101,7 +103,7 @@ async def aggregate():
                 indent=2,
             )
 
-    with open(os.path.join(OUT_DIR, "final.json"), "w") as file:
+    with open(os.path.join(DEFAULT_OUT_DIR, "final.json"), "w") as file:
         json.dump(dict_data, file, indent=2)
 
     for category_name in dict_data:

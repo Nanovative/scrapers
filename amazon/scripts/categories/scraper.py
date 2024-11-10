@@ -1,5 +1,7 @@
+from __init__ import DEFAULT_DATA_DIR
 import os
 import json
+import random
 import asyncio
 import logging
 import aiofiles
@@ -22,7 +24,7 @@ from playwright.async_api import (
 )
 
 ROOT_URL = "https://amazon.com"
-OUT_DIR = "./data/"
+OUT_DIR = DEFAULT_DATA_DIR
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 
@@ -165,10 +167,23 @@ async def explore_inner(
 async def get_sub_categories_from_root_categories(
     p: Playwright, browser: Browser, context: BrowserContext, page: Page, keyword: str
 ):
+    async def get_postcode_locator(page: Page):
+        await page.wait_for_selector("#nav-global-location-popover-link")
+        return page.locator("#nav-global-location-popover-link")
+
     data = {}
     try:
         await page.goto(ROOT_URL, timeout=0, wait_until="domcontentloaded")
         await page.wait_for_load_state("load", timeout=60000)
+
+        logging.info(f"Preparing to get postcode for {keyword}")
+        postcode_elem = await get_postcode_locator(page)
+        postcode_text = await postcode_elem.inner_text(
+            timeout=random.randint(8000, 14000)
+        )
+        location = postcode_text[postcode_text.index("\n") + 1 :]
+        location = location.split(" ")[-1]
+        logging.info(f"Location at keyword {keyword} = {location}")
 
         dropdown_locator = page.locator("#searchDropdownBox")
         option_count = await dropdown_locator.locator("option").count()
@@ -300,7 +315,7 @@ async def scrape_category_tree(
         logging.info("Gracefully cleaning up Playwright remnants...")
         await browser.close()
         await p.stop()
-        filename = OUT_DIR + " | ".join(keywords) + ".aggregated.json"
+        filename = OUT_DIR + "/" + " | ".join(keywords) + ".aggregated.json"
         async with aiofiles.open(filename, "w", encoding="utf-8") as file:
             json_data = await asyncio.to_thread(
                 json.dumps, obj=data, ensure_ascii=False, indent=2
