@@ -1,9 +1,10 @@
 import uuid
 
+from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime
 from shared.models.enums import BrowserType
-
+from shared.models.proxy import ProxyConf
 
 class Cookie(BaseModel):
     name: str
@@ -22,7 +23,7 @@ class AmazonCookieSet(BaseModel):
     cookies: list[Cookie]
     location: str
     expires: datetime
-    usable_times: int = 200
+    usable_times: int = 10000
     last_used: datetime = None
 
 
@@ -34,3 +35,4 @@ class AmazonCookieRequest(BaseModel):
     max_timeout: int = 15000
     browser_type: BrowserType = BrowserType.firefox
     do_fetch_pool: bool = True
+    proxy_conf: Optional[ProxyConf] = None

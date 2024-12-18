@@ -17,6 +17,7 @@ async def _cookie_pool_fill(
 ):
     logging.info(f"[coroutine_id={coroutine_id}]: Start cookie pool fill task")
     try:
+        proxy_conf = None
         msg = {
             "fn": start_add_task,
             "args": {
@@ -24,6 +25,7 @@ async def _cookie_pool_fill(
                 "coroutine_id": coroutine_id,
                 "lock": event_loop_lock,
                 "is_independent_loop": False,
+                "proxy_conf": proxy_conf,
             },
         }
         event_queue.put_nowait(msg)

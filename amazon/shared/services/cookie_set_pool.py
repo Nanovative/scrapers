@@ -5,6 +5,7 @@ import uuid
 
 from shared.models.cookie import Cookie, AmazonCookieRequest
 from shared.models.enums import BrowserType
+from shared.models.proxy import ProxyConf
 from shared.storages.cookie_set.base import CookieSetStorage
 from shared.services.cookie import get_cookies
 
@@ -151,6 +152,7 @@ async def start_add_task(
     coroutine_id: uuid.UUID = uuid.uuid4(),
     lock: asyncio.Lock = None,
     is_independent_loop=True,
+    proxy_conf: ProxyConf = None,
 ):
     async def helper():
         for browser_type in pool._browser_types:
@@ -167,6 +169,7 @@ async def start_add_task(
                 is_headless=True,
                 max_timeout=15000,
                 browser_type=browser_type,
+                proxy_conf=proxy_conf,
             )
             resp = await get_cookies(body)
             cookies = resp["cookies"]

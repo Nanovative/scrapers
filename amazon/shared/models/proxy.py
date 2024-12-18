@@ -11,6 +11,11 @@ class Proxy(BaseModel):
     proxies: list[str]
     last_used: datetime = None
 
+class ProxyConf(BaseModel):
+    server: str
+    username: str
+    password: str
+
 
 class ProxyRequest(BaseModel):
     request_id: uuid.UUID = None

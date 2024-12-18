@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Body
 from shared.models.proxy import ProxyRequest
-from api.utils import get_proxy_pool, event_loop_lock
+from shared.utils import get_proxy_pool, event_loop_lock
 
 router = APIRouter()
 

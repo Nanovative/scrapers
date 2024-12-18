@@ -1,7 +1,7 @@
 import uuid
 from fastapi import APIRouter
 from shared.models.category import Category
-from api.utils import get_category_pool, event_loop_lock
+from shared.utils import get_category_pool, event_loop_lock
 
 router = APIRouter()
 

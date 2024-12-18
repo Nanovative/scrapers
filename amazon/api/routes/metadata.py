@@ -1,6 +1,6 @@
 import uuid
 
-from api.utils import get_cookie_set_pool, event_queue
+from shared.utils import get_cookie_set_pool, event_queue
 from fastapi import APIRouter
 
 router = APIRouter()

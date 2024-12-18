@@ -5,7 +5,7 @@ from fastapi import APIRouter
 
 from shared.models.cookie import AmazonCookieRequest
 from shared.services.cookie import get_cookies
-from api.utils import get_cookie_set_pool, event_loop_lock
+from shared.utils import get_cookie_set_pool, event_loop_lock
 
 router = APIRouter()
 

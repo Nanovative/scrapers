@@ -16,7 +16,7 @@ from shared.tasks import (
     schedule_cookie_pool_fill,
     schedule_cookie_pool_process,
 )
-from utils import (
+from shared.utils import (
     event_queue,
     event_loop_lock,
     get_cookie_set_pool,

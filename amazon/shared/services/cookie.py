@@ -79,7 +79,14 @@ async def get_cookies(body: AmazonCookieRequest):
         elif body.browser_type == BrowserType.chromium:
             browser_type = p.chromium
 
-        browser = await browser_type.launch(headless=body.is_headless)
+        proxy_conf = None
+        if body.proxy_conf:
+            proxy_conf = body.proxy_conf.model_dump()
+
+        browser = await browser_type.launch(
+            headless=body.is_headless,
+            proxy=proxy_conf,
+        )
 
         context = await browser.new_context()
         page = await context.new_page()
