@@ -73,6 +73,7 @@ def get_filenames():
         and "\uf07c" not in filename
         and "|" not in filename
         and "processed" not in filename
+        and "aggregated" not in filename
         and "final" not in filename
     ]
 
