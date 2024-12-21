@@ -5,6 +5,7 @@ import os
 import bs4
 import json
 import uuid
+import random
 import asyncio
 
 import logging
@@ -20,6 +21,7 @@ from shared.utils import sleep_randomly
 from shared.models.category import Category
 from curl_cffi.requests import AsyncSession
 
+run_id = str(uuid.uuid4()).split("-")[0]
 
 class SortTendency(Enum):
     FEATURED = "featured-rank"
@@ -304,13 +306,64 @@ def postprocess_json(json_data: dict):
 
 async def process_category(
     category: Category, overwrite: bool, product_cap: int, processed_asins: set[str]
-):
-    should_stop = asyncio.Event()
-    overlapped = asyncio.Event()
+) -> int:
+    async def process_page(page: int, async_session: AsyncSession):
+        page_id = f"{page}_{run_id}"
 
-    overlap_threshold = 95.0
+        url = await asyncio.to_thread(build_product_url, url=base_url, qs=qs, page=page)
+        base_filename = f"{category.id}_{page_id}"
+        json_filename = f"{DEFAULT_DATA_DIR}/{base_filename}.json"
+
+        json_data = None
+
+        content, _, _ = await fetch_txt(
+            category=category,
+            url=url,
+            page=page,
+            async_session=async_session,
+        )
+        if content is not None:
+            json_data = await asyncio.to_thread(preprocess_txt, content)
+            logging.info(
+                f"[{category.name}][{page}]: Preprocessed raw TXT to dict data"
+            )
+            json_data = await asyncio.to_thread(postprocess_json, json_data)
+            logging.info(f"[{category.name}][{page}]: Postprocessed dict data")
+            json_str = await asyncio.to_thread(
+                json.dumps, json_data, separators=(",", ":")
+            )
+            logging.info(f"[{category.name}][{page}]: Dumped dict data to JSON string")
+
+        if json_data is not None:
+            page_metadata: dict = json_data["metadata"]
+            in_page_count: int = page_metadata["asinOnPageCount"]
+            approx_total_count: int = page_metadata["totalResultCount"]
+            actual_total_count: int = page_metadata["actualTotalResultCount"]
+
+            logging.info(
+                f"[{category.name}][{page}]: Product count = {actual_total_count}"
+            )
+
+            if approx_total_count == in_page_count or (
+                approx_total_count != in_page_count and in_page_count < 5
+            ):
+                logging.warning(
+                    f"[{category.name}][{page}]: Found the end of the category, stopping"
+                )
+                should_stop.set()
+
+            async with aiofiles.open(json_filename, "w") as json_file:
+                logging.info(f"[{category.name}][{page}]: Dumping JSON string to file")
+                await json_file.write(json_str)
+                logging.info(f"[{category.name}][{page}]: Dumped JSON string to file")
+            
+            return actual_total_count
+                
+        return 0
+
+    should_stop = asyncio.Event()
+
     product_count = 0
-    overlap_limit = 10
     rotation_batch = 3
 
     base_url, qs = preprocess_url_parts(category.url)
@@ -335,97 +388,38 @@ async def process_category(
     )
 
     results = []
+    tasks = []
 
     while True:
         page += 1
-        page_id = f"{page}---{uuid.uuid4()}"
-        if should_stop.is_set():
-            logging.info(
-                f"[{category.name}][{page}]: Stopped processing (end of category)"
-            )
-            break
-
-        if overlapped.is_set():
-            logging.info(
-                f"[{category.name}][{page}]: Stopped processing (found overlapped products)"
-            )
-            break
-
-        if product_count >= product_cap:
-            logging.info(
-                f"[{category.name}][{page}]: Exceeded product cap ({product_count}/{product_cap})"
-            )
-            break
-
-        url = await asyncio.to_thread(build_product_url, url=base_url, qs=qs, page=page)
-        category_path = category.path
-        category_path = category_path.replace("/", "__")
-        base_filename = f"{category_path}---{page_id}"
-        json_filename = f"{DEFAULT_DATA_DIR}/{base_filename}.json"
-
-        json_data = None
-
-        content, is_success, status_code = await fetch_txt(
-            category=category,
-            url=url,
-            page=page,
-            async_session=async_session,
+        task = asyncio.create_task(
+            process_page(page, async_session)
         )
-        if content is not None:
-            json_data = await asyncio.to_thread(preprocess_txt, content)
-            logging.info(
-                f"[{category.name}][{page}]: Preprocessed raw TXT to dict data"
-            )
-            json_data = await asyncio.to_thread(postprocess_json, json_data)
-            logging.info(f"[{category.name}][{page}]: Postprocessed dict data")
-            json_str = await asyncio.to_thread(
-                json.dumps, json_data, separators=(",", ":")
-            )
-            logging.info(f"[{category.name}][{page}]: Dumped dict data to JSON string")
-
-        if json_data is not None:
-            page_metadata: dict = json_data["metadata"]
-            in_page_count: int = page_metadata["asinOnPageCount"]
-            approx_total_count: int = page_metadata["totalResultCount"]
-            actual_total_count: int = page_metadata["actualTotalResultCount"]
-            page_asins: set[str] = set(page_metadata["asins"])
-
-            overlap_ratio = len(page_asins.intersection(processed_asins)) / len(
-                page_asins
-            )
-            overlap_perc = overlap_ratio * 100
-
-            if is_overlapped := overlap_perc > overlap_threshold:
-                overlap_limit -= 1
-                logging.warning(
-                    f"[{category.name}][{page}]: "
-                    + f"Found overlapping products "
-                    + f"({overlap_perc}% > {overlap_threshold}%) ({overlap_limit} times left)"
-                )
-                if overlap_limit < 0:
-                    overlapped.set()
-
-            product_count = product_count + actual_total_count
-            logging.info(
-                f"[{category.name}][{page}]: Product count after update = {product_count}"
-            )
-
-            if approx_total_count == in_page_count or (
-                approx_total_count != in_page_count and in_page_count < 5
-            ):
-                logging.warning(
-                    f"[{category.name}][{page}]: Found the end of the category, stopping"
-                )
-                should_stop.set()
-                status_code = 204
-
-            async with aiofiles.open(json_filename, "w") as json_file:
-                logging.info(f"[{category.name}][{page}]: Dumping JSON string to file")
-                await json_file.write(json_str)
-                logging.info(f"[{category.name}][{page}]: Dumped JSON string to file")
+        tasks.append(task)
 
         # Refresh cookies & proxies
         if (page - 1) % rotation_batch == 0:
+            logging.info(f"[{category.name}][{page}]: Time to rotate proxy")
+            sub_results = await asyncio.gather(*tasks, return_exceptions=True)
+            logging.info(f"[{category.name}][{page}]: Sub results = ({sub_results})")
+            product_count += sum(sub_results)
+            logging.info(
+                f"[{category.name}][{page}]: Product count at the moment = ({product_count})"
+            )
+
+            if should_stop.is_set():
+                logging.info(
+                    f"[{category.name}][{page}]: Stopped processing (end of category)"
+                )
+                break
+
+            if product_count >= product_cap:
+                logging.info(
+                    f"[{category.name}][{page}]: Exceeded product cap ({product_count}/{product_cap})"
+                )
+                break
+
+            tasks = []
             await async_session.close()
             async_session = AsyncSession(
                 cookies=cookies,
@@ -483,6 +477,8 @@ async def execute_pipeline(
 
         processed_subparents = set()
 
+        num_of_concurrent_tasks = 50
+
         for category in categories[:num_of_categories]:
             # if category.name in processed_parents:
             #     logging.warning(
@@ -495,11 +491,16 @@ async def execute_pipeline(
                     category, True, max_products_per_category, asins_map.get(category.name, set())
                 )
             )
-            logging.info(f"Created task to process category {category.name}")
+            logging.info(f"[{depth}]: Created task to process category {category.name}")
             tasks.append(task)
 
             if category.parent is not None:
                 await asyncio.to_thread(processed_subparents.add, category.parent)
+
+            if len(tasks) >= num_of_concurrent_tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+                processed_parents.union(processed_subparents)
+                tasks = []
 
         await asyncio.gather(*tasks, return_exceptions=True)
         processed_parents.union(processed_subparents)
@@ -509,4 +510,4 @@ if __name__ == "__main__":
     from shared.config.logger import setup_logger
 
     setup_logger()
-    asyncio.run(execute_pipeline(50000, -1))
+    asyncio.run(execute_pipeline(70, -1))
