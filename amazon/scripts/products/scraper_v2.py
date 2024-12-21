@@ -338,7 +338,7 @@ async def process_category(
 
     while True:
         page += 1
-        page_id = f"{page}-{uuid.uuid4()}"
+        page_id = f"{page}---{uuid.uuid4()}"
         if should_stop.is_set():
             logging.info(
                 f"[{category.name}][{page}]: Stopped processing (end of category)"
@@ -358,7 +358,9 @@ async def process_category(
             break
 
         url = await asyncio.to_thread(build_product_url, url=base_url, qs=qs, page=page)
-        base_filename = f"{category.name}-{page_id}"
+        category_path = category.path
+        category_path = category_path.replace("/", "__")
+        base_filename = f"{category_path}---{page_id}"
         json_filename = f"{DEFAULT_DATA_DIR}/{base_filename}.json"
 
         json_data = None
@@ -448,12 +450,19 @@ async def execute_pipeline(
     processed_parents = set()
     tasks = []
 
-    max_depth = 5
+    max_depth = 20
 
     for depth in range(max_depth, 0, -1):
         (categories, num_of_categories), status_code = await get_categories(depth)
+        if status_code != 200:
+            logging.error(f"Failed to fetch categories, skipping depth {depth}")
+            continue
+
+        if not num_of_categories:
+            logging.warning(f"No category to scrape, skipping depth {depth}")
+            continue
+
         asins_map = {category.name: set() for category in categories}
-        assert status_code == 200, "Can't fetch categories"
         product_json_files = await asyncio.to_thread(os.listdir, DEFAULT_DATA_DIR)
         for product_json_file in product_json_files:
             product_file_category = product_json_file.split("-")[0]
