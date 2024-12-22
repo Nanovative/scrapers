@@ -1,10 +1,8 @@
 services:
-  scraper-api:
+  api:
     image: amazon-scraper-api:latest
     build:
       dockerfile: Dockerfile.api
-    ports:
-      - "8000:8000"
     environment:
       - RUN_BACKGROUND_TASKS=${RUN_BACKGROUND_TASKS:-0}
     env_file:
@@ -12,6 +10,25 @@ services:
     ipc: host  # This sets the IPC mode
     security_opt:
       - seccomp=./shared/seccomp_profile.json  # This specifies the seccomp profile
+    entrypoint: python3
+    command: main.py
 
-    command: python3 main.py
+  products:
+    image: amazon-scraper-scripts:latest
+    build:
+      dockerfile: Dockerfile.scripts
+    environment:
+      - API_URL=${API_URL:-http://api:8000}
+      - DEPTHS_TO_RUN=${DEPTHS_TO_RUN:--1}
+      - MAX_PRODUCTS_PER_CATEGORY=${MAX_PRODUCTS_PER_CATEGORY:-50000}
+    env_file:
+      - scripts/.env
+    volumes:
+      - ./data:/app/data
+      - ./out:/app/out
+    working_dir: /app/scripts/products
+    command: /bin/bash -c "sleep 4 && python3 scraper_v4.py"
 
+networks:
+  default:
+    driver: bridge

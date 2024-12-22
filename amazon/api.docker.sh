@@ -10,6 +10,7 @@ docker run \
     --name=amazon-scraper-api \
     --ipc=host \
     --env-file=./api/.env \
+    -e RUN_BACKGROUND_TASKS=1 \
     -p 8000:8000 \
     --user pwuser \
     --security-opt seccomp=./shared/seccomp_profile.json \
