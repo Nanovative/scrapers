@@ -1,6 +1,6 @@
 import __init__
 
-import sys
+import os
 import uvicorn
 import asyncio
 import signal
@@ -38,20 +38,23 @@ async def run_api_app(num_workers: int = None):
     await get_proxy_pool()
     cookie_set_pool = await get_cookie_set_pool()
 
-    cookie_pool_fill_task = asyncio.create_task(
-        schedule_cookie_pool_fill(cookie_set_pool, event_queue, event_loop_lock),
-        name="cookie_pool_fill",
-    )
+    should_run_background_tasks = os.getenv("RUN_BACKGROUND_TASKS", "0").lower() == "1"
+    
+    if should_run_background_tasks:        
+        event_loop.create_task(
+            schedule_cookie_pool_fill(cookie_set_pool, event_queue, event_loop_lock),
+            name="cookie_pool_fill",
+        )
 
-    cookie_pool_process_task = event_loop.create_task(
-        schedule_cookie_pool_process(cookie_set_pool, event_queue, event_loop_lock),
-        name="cookie_pool_process",
-    )
+        event_loop.create_task(
+            schedule_cookie_pool_process(cookie_set_pool, event_queue, event_loop_lock),
+            name="cookie_pool_process",
+        )
 
-    cookie_pool_cleanup_task = event_loop.create_task(
-        schedule_cookie_pool_cleanup(cookie_set_pool, event_queue, event_loop_lock),
-        name="cookie_pool_cleanup",
-    )
+        event_loop.create_task(
+            schedule_cookie_pool_cleanup(cookie_set_pool, event_queue, event_loop_lock),
+            name="cookie_pool_cleanup",
+        )
 
     app = FastAPI()
 
