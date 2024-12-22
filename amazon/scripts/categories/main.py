@@ -33,6 +33,9 @@ def execute_pipeline(
         "Pet Supplies",
         "Premium Beauty",
         "Smart Home",
+        "Baby",
+        "Toys & Games",
+        "Video Games",
     ]
     num_of_keywords = len(keywords)
     if num_of_keywords == 0:
