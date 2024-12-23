@@ -110,7 +110,7 @@ def build_product_url(
     url: str,
     qs: dict[str, str],
     page: int,
-    sort_tendency: SortTendency = SortTendency.NEWEST_PRODUCTS,
+    sort_tendency: SortTendency = SortTendency.FEATURED,
 ):
     final_qs = {**qs, "page": page, "ref": f"sr_pg_{page}", "s": sort_tendency.value}
     full_path = f"{url}?{urlparser.urlencode(final_qs)}"
@@ -430,7 +430,10 @@ async def process_category(
 
 
 async def execute_pipeline(
-    max_products_per_category: int, max_categories_per_depth: int = -1, specified_depths: str = "-1",
+    max_products_per_category: int, 
+    max_categories_per_depth: int = -1, 
+    specified_depths: str = "-1",
+    categories_to_scrape: str = "",
 ):
     processed_parents = set()
     tasks = []
@@ -458,23 +461,39 @@ async def execute_pipeline(
 
         processed_subparents = set()
         asin_map = set()
+        filter_category_names = (
+            set() 
+            if not categories_to_scrape 
+            else {
+                cat 
+                for cat 
+                in categories_to_scrape.split("|")
+            }
+        )
 
         for category in categories[:num_of_categories]:
-            task = asyncio.create_task(
-                process_category(
-                    category, True, max_products_per_category, asin_map,
+            if (
+                not len(filter_category_names)
+                or (
+                    (category.ancestor is None and category.name in filter_category_names) 
+                    or (category.ancestor in filter_category_names)
                 )
-            )
-            logging.info(f"Created task to process category {category.name}")
-            tasks.append(task)
+            ):
+                task = asyncio.create_task(
+                    process_category(
+                        category, True, max_products_per_category, asin_map,
+                    )
+                )
+                logging.info(f"Created task to process category {category.name}")
+                tasks.append(task)
 
-            if category.parent is not None:
-                await asyncio.to_thread(processed_subparents.add, category.parent)
-                
-            if len(tasks) > 15:
-                await asyncio.gather(*tasks, return_exceptions=True)
-                tasks = []
-                processed_parents.union(processed_subparents)
+                if category.parent is not None:
+                    await asyncio.to_thread(processed_subparents.add, category.parent)
+                    
+                if len(tasks) > 15:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    tasks = []
+                    processed_parents.union(processed_subparents)
 
         await asyncio.gather(*tasks, return_exceptions=True)
         processed_parents.union(processed_subparents)
