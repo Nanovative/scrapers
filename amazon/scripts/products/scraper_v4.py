@@ -308,13 +308,12 @@ def postprocess_json(json_data: dict):
 async def process_category(
     category: Category, overwrite: bool, product_cap: int, processed_asins: set[str]
 ):
+    logging.info(f"[{category.name}]: Scraping category")
     should_stop = asyncio.Event()
     overlapped = asyncio.Event()
 
-    overlap_threshold = 95.0
     product_count = 0
-    overlap_limit = 10
-    rotation_batch = 3
+    rotation_batch = 8
 
     base_url, qs = preprocess_url_parts(category.url)
     page = 0
@@ -343,6 +342,7 @@ async def process_category(
         page += 1
         base_filename = f"{run_id}_{category.name}_{category.depth}_{page}"
         json_filename = f"{DEFAULT_DATA_DIR}/{base_filename}.json"
+        logging.info(f"[{category.name}][{page}]: Walking {category.name}_{category.depth}")
 
         if should_stop.is_set():
             logging.info(
@@ -363,10 +363,11 @@ async def process_category(
             break
 
         url = await asyncio.to_thread(build_product_url, url=base_url, qs=qs, page=page)
+        logging.info(f"[{category.name}][{page}]: Product URL ({url})")
 
         json_data = None
 
-        content, is_success, status_code = await fetch_txt(
+        content, _, _ = await fetch_txt(
             category=category,
             url=url,
             page=page,
@@ -389,22 +390,6 @@ async def process_category(
             in_page_count: int = page_metadata["asinOnPageCount"]
             approx_total_count: int = page_metadata["totalResultCount"]
             actual_total_count: int = page_metadata["actualTotalResultCount"]
-            page_asins: set[str] = set(page_metadata["asins"])
-
-            overlap_ratio = len(page_asins.intersection(processed_asins)) / len(
-                page_asins
-            )
-            overlap_perc = overlap_ratio * 100
-
-            if is_overlapped := overlap_perc > overlap_threshold:
-                overlap_limit -= 1
-                logging.warning(
-                    f"[{category.name}][{page}]: "
-                    + f"Found overlapping products "
-                    + f"({overlap_perc}% > {overlap_threshold}%) ({overlap_limit} times left)"
-                )
-                if overlap_limit < 0:
-                    overlapped.set()
 
             product_count = product_count + actual_total_count
             logging.info(
@@ -418,7 +403,6 @@ async def process_category(
                     f"[{category.name}][{page}]: Found the end of the category, stopping"
                 )
                 should_stop.set()
-                status_code = 204
 
             async with aiofiles.open(json_filename, "w") as json_file:
                 logging.info(f"[{category.name}][{page}]: Dumping JSON string to file")
@@ -486,12 +470,11 @@ async def execute_pipeline(
 
             if category.parent is not None:
                 await asyncio.to_thread(processed_subparents.add, category.parent)
-            
-        if len(tasks) > 25:
-            await asyncio.gather(*tasks, return_exceptions=True)
-            tasks = []
-            processed_parents.union(processed_subparents)
                 
+            if len(tasks) > 15:
+                await asyncio.gather(*tasks, return_exceptions=True)
+                tasks = []
+                processed_parents.union(processed_subparents)
 
         await asyncio.gather(*tasks, return_exceptions=True)
         processed_parents.union(processed_subparents)
